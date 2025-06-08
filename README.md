@@ -1,10 +1,5 @@
 # seq2expr-variance
-
-https://www.gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression: Median gene-level TPM by tissue. Median expression was calculated from the file GTEx_Analysis_v10_RNASeQCv2.4.2_gene_tpm.gct.gz
-CADD score: https://cadd.gs.washington.edu/snv
-Genome download: https://gnomad.broadinstitute.org/data#v4
-Matched Annotation from NCBI and EMBL-EBI (MANE): https://www.ncbi.nlm.nih.gov/refseq/MANE/
-
+Goal is to use deep‐learning–based regulatory models to quantify how common cis‐variants (from gnomAD) shape gene expression variability—and to assess whether incorporating these “expected genetic variances” improves expression analyses (e.g. differential expression or variant prioritization).
 
 ## Data
 1. ENCFF150TGS.bed: https://www.encodeproject.org/files/ENCFF150TGS/
@@ -26,7 +21,12 @@ Matched Annotation from NCBI and EMBL-EBI (MANE): https://www.ncbi.nlm.nih.gov/r
 • GRCh38 reference FASTA.
 • Use: extract ±262 kb sequence windows for Flashzoi / Enformer input.
 
-
+## References
+- https://www.gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression: Median gene-level TPM by tissue. Median expression was calculated from the file GTEx_Analysis_v10_RNASeQCv2.4.2_gene_tpm.gct.gz
+- CADD score: https://cadd.gs.washington.edu/snv
+- Genome download: https://gnomad.broadinstitute.org/data#v4
+- Matched Annotation from NCBI and EMBL-EBI (MANE): https://www.ncbi.nlm.nih.gov/refseq/MANE/
+- Borzoi: https://github.com/johahi/borzoi-pytorch
 
 
 
