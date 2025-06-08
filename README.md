@@ -1,7 +1,7 @@
 # seq2expr-variance
 Goal is to use deep‐learning–based regulatory models to quantify how common cis‐variants (from gnomAD) shape gene expression variability—and to assess whether incorporating these “expected genetic variances” improves expression analyses (e.g. differential expression or variant prioritization).
 
-![Data flow](./docs/figures/dataflow.png)
+![Data flow](/docs/figures/dataflow.png)
 
 ## Data
 1. ENCFF150TGS.bed: https://www.encodeproject.org/files/ENCFF150TGS/
