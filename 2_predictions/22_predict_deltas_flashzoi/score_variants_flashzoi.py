@@ -1,4 +1,21 @@
 #!/usr/bin/env python3
+"""
+Score cis-regulatory variants using Flashzoi/Borzoi models
+
+It processes variant TSVs for each gene, predicts their effect on gene expression (DELTA),
+and calculates the per-variant contribution to cis-heritability (VAR_I) using:
+    VAR_I = (Δ^2) × 2 × AF × (1 - AF)
+
+Input:
+- Variant TSVs with REF, ALT, POS0, AF
+- One-hot encoded reference sequences (per gene)
+- Reference predictions (mean_ref.npy)
+
+Output:
+- TSVs with DELTA and VAR_I for all valid SNPs per gene
+- Log file tracking runtime statistics
+"""
+
 import argparse, os, time
 from pathlib import Path
 from typing import Sequence
@@ -14,6 +31,18 @@ BASE2ROW = {b: i for i, b in enumerate("ACGT")}
 
 
 # ─── Flashzoi Forward ──────────────────────────────────────────────────────
+"""
+Predict average expression signal across 32bp near the center of the input sequence.
+
+Args:
+    models: list of trained Borzoi/Flashzoi models.
+    x: tensor of one-hot encoded input sequences.
+
+Returns:
+    Tensor of shape (N,) with predicted average expression values.
+    These are used to calculate Δ (variant effect on expression).
+"""
+
 def fwd(models: Sequence[Borzoi], x: torch.Tensor) -> torch.Tensor:
     y_sum = None
     with torch.autocast(x.device.type, dtype=torch.float16, enabled=x.device.type == "cuda"):
