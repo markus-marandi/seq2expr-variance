@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""
-Score cis-regulatory variants using Flashzoi/Borzoi models
-
-It processes variant TSVs for each gene, predicts their effect on gene expression (DELTA),
-and calculates the per-variant contribution to cis-heritability (VAR_I) using:
-    VAR_I = (Δ^2) × 2 × AF × (1 - AF)
-
-Input:
-- Variant TSVs with REF, ALT, POS0, AF
-- One-hot encoded reference sequences (per gene)
-- Reference predictions (mean_ref.npy)
-
-Output:
-- TSVs with DELTA and VAR_I for all valid SNPs per gene
-- Log file tracking runtime statistics
-"""
-
 import argparse, os, time
 from pathlib import Path
 from typing import Sequence
@@ -29,28 +12,31 @@ from flashzoi_helpers import load_flashzoi_models
 
 BASE2ROW = {b: i for i, b in enumerate("ACGT")}
 
+def load_track_indices(txt_file: Path) -> list[int]:
+    """
+    txt_file: plain text, one integer track index per line.
+              (create it beforehand with grep, regex, etc.)
+    """
+    idx = [int(l.strip()) for l in txt_file.read_text().splitlines() if l.strip()]
+    if not idx:
+        raise ValueError(f"{txt_file} is empty")
+    print(f"Using {len(idx)} tracks → first 5: {idx[:5]}")
+    return idx
 
 # ─── Flashzoi Forward ──────────────────────────────────────────────────────
-"""
-Predict average expression signal across 32bp near the center of the input sequence.
+def fwd(models, x: torch.Tensor, track_idx: torch.Tensor) -> torch.Tensor:
+    """
+    Ensemble-average prediction over *exactly* the tracks you pass in `track_idx`.
 
-Args:
-    models: list of trained Borzoi/Flashzoi models.
-    x: tensor of one-hot encoded input sequences.
-
-Returns:
-    Tensor of shape (N,) with predicted average expression values.
-    These are used to calculate Δ (variant effect on expression).
-"""
-
-def fwd(models: Sequence[Borzoi], x: torch.Tensor) -> torch.Tensor:
+    track_idx can be a single int or a 1-D LongTensor with several indices.
+    """
     y_sum = None
-    with torch.autocast(x.device.type, dtype=torch.float16, enabled=x.device.type == "cuda"):
+    with torch.autocast(x.device.type, torch.float16, enabled=x.device.type == "cuda"):
         for m in models:
             y = m(x)
-            y = y["human"] if isinstance(y, dict) else y
-            c = y.shape[-1] // 2
-            sig = y[:, 1, c - 16:c + 16].mean(1)
+            y = y["human"] if isinstance(y, dict) else y          # [N, C, T]
+            c   = y.shape[-1] // 2                                # centre bin
+            sig = y[:, track_idx, c-16:c+16].mean((1, 2))         # average bins **and** tracks
             y_sum = sig if y_sum is None else y_sum + sig
     return y_sum / len(models)
 
@@ -58,7 +44,8 @@ def fwd(models: Sequence[Borzoi], x: torch.Tensor) -> torch.Tensor:
 # ─── Per-Gene Scoring ──────────────────────────────────────────────────────
 def score_gene(gene_dir: Path, onehot_dir: Path, pred_dir: Path,
                out_dir: Path, models: Sequence[Borzoi],
-               batch: int, device: torch.device):
+               batch: int, device: torch.device,
+               track_idxs: torch.Tensor):
     gene = gene_dir.name
     start_time = time.time()
 
@@ -68,13 +55,29 @@ def score_gene(gene_dir: Path, onehot_dir: Path, pred_dir: Path,
     tsv = out_gene_dir / f"{gene}_variants.tsv"
 
     if not in_tsv.exists():
-        print(f"✘ {gene}: missing input TSV"); return
+        print(f"✘ {gene}: missing input TSV");
+        return
 
     df = pd.read_csv(in_tsv, sep="\t")
     df.rename(columns={c: c.upper() for c in df.columns}, inplace=True)
 
+    # Filter out rare variants: keep only variants with AF ≥ 0.01
+    if "AF" in df.columns:
+        df["AF"] = pd.to_numeric(df["AF"], errors="coerce")
+        before = len(df)
+        df = df[df["AF"] >= 0.01].reset_index(drop=True)
+        after = len(df)
+        if after == 0:
+            print(f"✘ {gene}: all variants filtered out by AF threshold");
+            return
+        print(f"→ {gene}: filtered {before - after} variants by AF < 0.01")
+    else:
+        print(f"✘ {gene}: AF column missing for filtering");
+        return
+
     if "REF" not in df.columns or "ALT" not in df.columns or "POS0" not in df.columns:
-        print(f"✘ {gene}: missing required columns"); return
+        print(f"✘ {gene}: missing required columns");
+        return
 
     snp_mask = (df["REF"].str.len() == 1) & (df["ALT"].str.len() == 1)
     df = df[snp_mask].reset_index(drop=True)
@@ -83,7 +86,8 @@ def score_gene(gene_dir: Path, onehot_dir: Path, pred_dir: Path,
         df.reset_index(drop=True, inplace=True)
 
     if df.empty:
-        print(f"✘ {gene}: no SNP records"); return
+        print(f"✘ {gene}: no SNP records");
+        return
 
     df["DELTA"] = pd.to_numeric(df.get("DELTA", pd.Series(np.nan, index=df.index)), errors="coerce")
     df["VAR_I"] = pd.to_numeric(df.get("VAR_I", pd.Series(np.nan, index=df.index)), errors="coerce")
@@ -93,7 +97,8 @@ def score_gene(gene_dir: Path, onehot_dir: Path, pred_dir: Path,
     todo = pd.Index(todo).drop_duplicates().tolist()
 
     if not todo:
-        print(f"✔ {gene}: already done"); return
+        print(f"✔ {gene}: already done");
+        return
 
     try:
         ref_np = np.load(onehot_dir / f"{gene}.npy").astype(np.float16)
@@ -128,7 +133,11 @@ def score_gene(gene_dir: Path, onehot_dir: Path, pred_dir: Path,
         if valid_idx:
             xb_valid = xb[valid_mask]
             with torch.no_grad():
-                delta_valid = (fwd(models, xb_valid).cpu().numpy() - ref_avg).astype(np.float32)
+
+                delta_valid = (
+                        fwd(models, xb_valid, track_idxs).cpu().numpy()  # ← use same list everywhere
+                        - ref_avg
+                ).astype(np.float32)
             df.loc[valid_idx, "DELTA"] = delta_valid
 
             if "AF" in sub.columns:
@@ -158,29 +167,63 @@ def score_gene(gene_dir: Path, onehot_dir: Path, pred_dir: Path,
         f.write(f"{gene}\t{len(todo)}\t{elapsed:.2f}\t{vps:.2f}\n")
 
 
+# ─── main ───────────────────────────────────────────────────────────────────
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--variants-dir", required=True, type=Path)
-    ap.add_argument("--onehot-dir", required=True, type=Path)
+    # New high-level switches – you can still fall back to the old ones
+    ap.add_argument("--dataset-root", type=Path,
+                    help="e.g. data/intermediate/dataset3 (overrides the *-dir flags)")
+    ap.add_argument("--cohort", choices=["ClinGen_gene_curation_list",
+                                         "nonessential_ensg"],
+                    help="Which sub-cohort to run under <dataset-root>/variants/<cohort>")
+    # The original low-level flags are still accepted for backward compatibility
+    ap.add_argument("--variants-dir", type=Path)
+    ap.add_argument("--onehot-dir", type=Path)
     ap.add_argument("--pred-dir", required=True, type=Path)
-    ap.add_argument("--out-dir", required=True, type=Path)
+    ap.add_argument("--out-dir", type=Path)
+
     ap.add_argument("--folds", default=4, type=int)
     ap.add_argument("--batch", default=64, type=int)
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--gene", help="Optional single gene to run")
+    ap.add_argument("--track-idx-file", required=True, type=Path,
+                    help="text file with one track index per line")
 
     args = ap.parse_args()
-    device = torch.device(args.device if args.device != "cuda" or torch.cuda.is_available()
+
+    # ------------------------------------------------------------------ #
+    # Resolve paths                                                      #
+    # ------------------------------------------------------------------ #
+    if args.dataset_root and args.cohort:
+        base = args.dataset_root
+        cohort = args.cohort
+        variants_dir = base / "variants" / cohort
+        onehot_dir = base / "onehots" / cohort
+        out_dir = Path(base.parent) / "output" / base.name / "flashzoi_outputs" / cohort
+    else:
+        variants_dir = args.variants_dir
+        onehot_dir = args.onehot_dir
+        out_dir = args.out_dir
+        if None in (variants_dir, onehot_dir, out_dir):
+            ap.error("If --dataset-root/--cohort not given you must pass all three *-dir flags.")
+
+    device = torch.device(args.device
+                          if args.device != "cuda" or torch.cuda.is_available()
                           else "cpu")
     models = load_flashzoi_models(args.folds, device)
 
-    dirs = [args.variants_dir / args.gene] if args.gene else \
-           sorted([d for d in args.variants_dir.iterdir() if d.is_dir()])
+    track_idxs = torch.as_tensor(
+        load_track_indices(args.track_idx_file),
+        dtype=torch.long,
+        device=device,
+    )
+
+    dirs = [variants_dir / args.gene] if args.gene else \
+        sorted(d for d in variants_dir.iterdir() if d.is_dir())
 
     for d in dirs:
-        score_gene(d, args.onehot_dir, args.pred_dir,
-                   args.out_dir, models, args.batch, device)
-
+        score_gene(d, onehot_dir, args.pred_dir,
+                   out_dir, models, args.batch, device, track_idxs)
 
 if __name__ == "__main__":
     main()
