@@ -3,9 +3,9 @@ from tqdm import tqdm
 import re
 
 # --- Input paths ---
-gene_list_path = "/Users/markus/seq2expr-variance/data/initial/dataset3/nonessential.ensg.tsv"
-mane_path = "/Users/markus/seq2expr-variance/data/initial/MANE.GRCh38.v1.4.summary.txt"
-out_bed_path = "/Users/markus/seq2expr-variance/data/intermediate/dataset3/nonessential_ensg_tss±2kb.bed"
+gene_list_path = "../../data/initial/dataset3/nonessential.ensg.tsv"
+mane_path = "../../data/initial/MANE.GRCh38.v1.4.summary.txt"
+out_bed_path = "../../intermediate/dataset3/nonessential_ensg_tss±2kb.bed"
 
 # --- Load curated gene list ---
 ensg_list = pd.read_csv(gene_list_path, header=None, names=["ensg"])
