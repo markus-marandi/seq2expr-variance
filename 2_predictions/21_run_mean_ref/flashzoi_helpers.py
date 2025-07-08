@@ -1,6 +1,6 @@
 from typing import List
 import torch
-from borzoi_pytorch import Borzoi   # pip install borzoi-pytorch
+from borzoi_pytorch import Borzoi
 
 def load_flashzoi_models(num_folds: int,
                          device: torch.device,
