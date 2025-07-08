@@ -2,8 +2,7 @@ import pandas as pd
 
 # 1) load GTEx TPM
 tpm = pd.read_csv(
-    "../data/initial/"
-    "GTEx_Analysis_2022-06-06_v10_RNASeQCv2.4.2_gene_median_tpm.gct",
+    "../../data/initial/GTEx_Analysis_2022-06-06_v10_RNASeQCv2.4.2_gene_median_tpm.gct",
     sep="\t", skiprows=2
 )
 tpm = tpm.rename(columns={"Name": "gene_id", "Muscle_Skeletal": "TPM"})
@@ -13,8 +12,7 @@ tpm["gene_base"] = tpm.gene_id.str.split(".").str[0]
 
 # your MANE set for chr20, also version-stripped
 mane = pd.read_csv(
-    "../data/initial/"
-    "MANE.GRCh38.v1.4.summary.txt",
+    "../../data/initial/MANE.GRCh38.v1.4.summary.txt",
     sep="\t", dtype=str
 )
 mane["gene_base"] = mane.Ensembl_Gene.str.split(".").str[0]

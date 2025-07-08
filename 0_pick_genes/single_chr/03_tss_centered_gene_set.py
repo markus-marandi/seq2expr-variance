@@ -1,6 +1,6 @@
 import pandas as pd, numpy as np, os
 
-SUMMARY_PATH    = "../data/initial/MANE.GRCh38.v1.4.summary.txt"
+SUMMARY_PATH    = "../../data/initial/MANE.GRCh38.v1.4.summary.txt"
 MEDIAN_TPM_PATH = ("../data/initial/"
                    "GTEx_Analysis_2022-06-06_v10_RNASeQCv2.4.2_gene_median_tpm.gct")
 
@@ -81,10 +81,13 @@ def filter_nonoverlapping(pool, full_df, needed=30):
 
 # write bed files
 def write_bed(sel, out_bed):
-    hdr = "#chromosome\tstart\tend\tid_base\texpr_value\texpr_rank\toverlaps\n"
-    with open(out_bed,'w') as fo:
+    hdr = (
+        "#chromosome\tstart\tend\tid_base\t"
+        "expr_value\texpr_rank\toverlaps\ttss_pos\n"
+    )
+    with open(out_bed, "w") as fo:
         fo.write(hdr)
-        for _,r in sel.iterrows():
+        for _, r in sel.iterrows():
             fo.write("\t".join([
                 r.chromosome,
                 str(r.start),
@@ -92,8 +95,9 @@ def write_bed(sel, out_bed):
                 r.id_base,
                 f"{r.expr_value:.3f}",
                 f"{r.expr_rank:.3f}",
-                r.overlaps
-            ])+"\n")
+                r.overlaps,
+                str(r.tss_position)
+            ]) + "\n")
     print(f"Wrote {len(sel)} → {out_bed}")
 
 
