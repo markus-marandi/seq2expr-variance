@@ -9,19 +9,17 @@ import pandas as pd
 from pyfaidx import Fasta, FetchError
 from tqdm.auto import tqdm
 
-# ───────────────────────────── CONFIG ──────────────────────────────
 IN_BEDS = [
-    "/Users/markus/seq2expr-variance/data/intermediate/dataset3/ClinGen_gene_curation_list_tss±2kb.bed",
-    "/Users/markus/seq2expr-variance/data/intermediate/dataset3/nonessential_ensg_tss±2kb.bed",
+    "../../data/intermediate/dataset3/ClinGen_gene_curation_list_tss±2kb.bed",
+    "../../data/intermediate/dataset3/nonessential_ensg_tss±2kb.bed",
 ]
 
-REF_FA  = "/Users/markus/seq2expr-variance/data/initial/GRCh38.primary_assembly.genome.fa"
+REF_FA  = "../../data/initial/GRCh38.primary_assembly.genome.fa"
 
 WINDOW      = 524_288
 HALF_WIN    = WINDOW // 2
 BASE2ROW    = {"A": 0, "C": 1, "G": 2, "T": 3}
 
-# ─────────────────────── helper: chromosome key ────────────────────
 def coerce_chrom(chrom: str, fasta: Fasta) -> str:
     if chrom in fasta:
         return chrom
@@ -31,7 +29,6 @@ def coerce_chrom(chrom: str, fasta: Fasta) -> str:
         return "chr" + chrom
     raise KeyError(f"{chrom} not found in FASTA")
 
-# ─────────────────────── helper: one-hot encode ────────────────────
 def one_hot_encode(seq: str) -> np.ndarray:
     arr = np.zeros((4, len(seq)), dtype=np.float32)
     for i, b in enumerate(seq):
@@ -40,7 +37,6 @@ def one_hot_encode(seq: str) -> np.ndarray:
             arr[j, i] = 1.0
     return arr
 
-# ─────────────────────── helper: extract window ────────────────────
 def extract_window(chrom: str, tss: int, fasta: Fasta) -> np.ndarray:
     chrom = coerce_chrom(chrom, fasta)
     left  = max(0, tss - HALF_WIN)
@@ -55,14 +51,13 @@ def extract_window(chrom: str, tss: int, fasta: Fasta) -> np.ndarray:
     if len(seq) < WINDOW:
         pad_len = WINDOW - len(seq)
         seq = seq + "N" * pad_len
-        print(f"⚠ Padded {chrom}:{left}-{right} by {pad_len} bp")
+        print(f"Padded {chrom}:{left}-{right} by {pad_len} bp")
 
     return one_hot_encode(seq)
 
-# ─────────────────────── core routine ──────────────────────────────
 def prepare_dataset(in_bed: str) -> Path:
     name_base = Path(in_bed).stem.replace("_tss±2kb", "")
-    out_dir = Path("/Users/markus/seq2expr-variance/data/intermediate/dataset3/onehots") / name_base
+    out_dir = Path("../../data/intermediate/dataset3/onehots") / name_base
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cols = ["chrom","start","end","gene",
@@ -126,7 +121,6 @@ def prepare_dataset(in_bed: str) -> Path:
     return meta_path
 
 
-# ─────────────────────── sanity check ──────────────────────────────
 def md5(path: Path, chunk: int = 1<<20) -> str:
     h = hashlib.md5()
     with open(path, "rb") as f:
@@ -167,7 +161,6 @@ def sanity_check(meta_tsv: Path) -> None:
 
     print("✓ Sanity-check passed – all arrays unique, 4×524 288, valid one-hot.\n")
 
-# ─────────────────────── entrypoint ────────────────────────────────
 def main():
     for bed in IN_BEDS:
         try:
