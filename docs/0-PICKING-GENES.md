@@ -87,11 +87,20 @@ All workflows produce BED files with TSS-centered windows:
 - **Coordinate system**: 0-based, half-open intervals
 
 ### Downstream Usage
-These BED files are used in subsequent steps to:
-1. Extract ±262kb sequence windows for model input
-2. Annotate variants within gene regions
-3. Generate one-hot encoded sequence arrays
-4. Create variant lists for expression variance prediction
+These BED files are used in subsequent steps (`1_prep_model_inputs/`):
+
+**Single Chromosome Path (Dataset 1 & 2)**:
+1. `single_chr/12_grow_onehot.py` - Extract ±262kb sequences and create one-hot arrays
+2. `single_chr/13_annotate_variants.py` - Annotate variants from gnomAD chr20 VCF
+
+**Genome-wide Path (Dataset 3)**:
+1. `genome/12_grow_onehot.py` - Extract ±262kb sequences and create one-hot arrays  
+2. `genome/13_annotate_variants_with_Hail.py` - Annotate variants using Hail from gnomAD
+
+Both workflows produce:
+- One-hot encoded sequence arrays (4×524,288 bp) as `.npy` files
+- `flashzoi_meta.tsv` with gene metadata and array paths
+- Variant lists with allele frequencies for each gene's ±262kb window
 
 ## When to Use Each Workflow
 
